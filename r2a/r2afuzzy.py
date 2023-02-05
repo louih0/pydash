@@ -1,3 +1,9 @@
+'''
+Implementação do FDASH para adaptação de stream
+Estudantes: Luís Henrique Araújo Martins(221002058)
+            Raquel da Silva Sousa(200042912)
+'''
+
 from base.whiteboard import Whiteboard
 from player.parser import *
 from r2a.ir2a import IR2A
@@ -10,12 +16,12 @@ class R2AFuzzy(IR2A):
 
     def __init__(self, id):
         IR2A.__init__(self, id)
-        self.throughputs = []
+        self.throughputs = [] #todas as vazões
         self.request_time = 0
-        self.qi = []
-        self.buffers = []
-        self.resolutions = []
-        self.T = 35
+        self.qi = [] 
+        self.buffers = [] #todos os bufffers
+        self.resolutions = [] #todas as resoluções usadas
+        self.T = 35 #Tempo ideal do buffer
         self.TWO_THIRDS_T = (2 * self.T) /3
         self.FOUR_T = 4 * self.T
 
@@ -37,36 +43,29 @@ class R2AFuzzy(IR2A):
 
         if len(self.buffer) > 0: 
             f = self.output_controller(self.buffer)
-            avarage_thoughputs = mean(self.throughputs[-3:])
-            avarage_resolutions = mean(self.resolutions[-3:])
+            avarage_thoughputs = mean(self.throughputs[-3:]) #Média das últimas três vazões
             next_bit_rate = f * avarage_thoughputs
-            index = bisect.bisect(self.qi, next_bit_rate)
+            index = bisect.bisect(self.qi, next_bit_rate) #Índice da maior resolução disponível menor que next_bit_rate
             next_resolution = self.qi[index - 1]
-            current_resolution = self.resolutions[-1]            
-            estimated_buffer = 'nao interessa'
-
-            print(f'+++++++++++++ self.resolutions[-5:],mean(self.resolutions[-5:]), next_resolution, estimated_buffer')
-            print(f'+++++++++++++ {self.resolutions[-5:],mean(self.resolutions[-5:]), next_resolution, estimated_buffer}')
+            current_resolution = self.resolutions[-1]
 
             estimated_buffer_next  = self.buffer_time + ((self.throughputs[-1] / 3) / next_resolution) * 60
             estimated_buffer_previous = self.buffer_time + ((self.throughputs[-1] / 3) / current_resolution) * 60
 
+            #Política para evitar alterações de resolução desnecessárias
+
             if next_resolution > current_resolution:
                 if estimated_buffer_next < self.T:
                     next_resolution = current_resolution
-                    print(f'!!!!!!!!!!!! OLHA O BUFFER: {estimated_buffer}')
             elif next_resolution < current_resolution:
                 if estimated_buffer_previous > self.T:
                     next_resolution = current_resolution 
-                    print(f'!!!!!!!!!!!! Caso 2')
-
-            print(f'>>>>>>>>>>>>> f, self.buffer_time, current_throughput, avarage_thoughputs, current_resolution, next_bit_rate, index, next_resolution')
-            print(f'>>>>>>>>>>>>>{f, self.buffer_time, self.throughputs[-1], avarage_thoughputs, current_resolution, next_bit_rate, index, next_resolution}')
 
         msg.add_quality_id(next_resolution)
         self.resolutions.append(next_resolution)
         self.send_down(msg)
-
+    
+    #Calcula o valor de cada variável a partir da fórmula de função linear
     def linear_function(self,x0,x1, diff = False):
         a  = 1 / (x1 - x0)
         b = - (a * x0)
@@ -74,13 +73,16 @@ class R2AFuzzy(IR2A):
             return a * self.diff + b
         return a * self.buffer_time + b
 
+    #Cálculo do parâmetro f de diminuição ou aumento da resolução
     def output_controller(self, buffer):
         self.buffer_time = buffer[-1][1]
         try:
             previous_buffer_time = self.buffers[-1]
         except:
             previous_buffer_time = self.buffer_time
+        
         self.buffers.append(self.buffer_time)
+
         FACTORS = {'N2':0.25,'N1':0.5, 'Z':1, 'P1':1.5, 'P2':2}
         self.short, close, self.long, falling, steady, rising = 0,0,0,0,0,0
 
@@ -127,16 +129,10 @@ class R2AFuzzy(IR2A):
             rising = 1
         else:
             rising = self.linear_function(0, self.FOUR_T, True)
-
-        print(f"*******************previous_buffer_time, self.buffer_time")
-        print(f"*******************{previous_buffer_time, self.buffer_time}")
-        print(f'*******************.short, close, long')
-        print(f'*******************.{short, close, long}')
-        print(f'*******************.falling, steady, rising')
-        print(f'*******************.{falling, steady, rising}')
-        
+       
         rules = []
 
+        #Regras calculadas a partir das variáveis
         rules.append(min(short, falling)) 
         rules.append(min(close, falling)) 
         rules.append(min(long, falling)) 
@@ -147,6 +143,7 @@ class R2AFuzzy(IR2A):
         rules.append(min(close, rising)) 
         rules.append(min(long, rising))
 
+        # I = increase, SI = small increase, NC = no change, SR = small reduce, R = reduce
         I =  sqrt(rules[8]**2)
         SI = sqrt(rules[5]**2 + rules[7]**2)        
         NC = sqrt(rules[2]**2 + rules[4]**2 + rules[6]**2)        
@@ -160,11 +157,7 @@ class R2AFuzzy(IR2A):
 
     def handle_segment_size_response(self, msg):
         t = time.perf_counter() - self.request_time
-        # Vazão
-        #self.vazao[self.qi] = msg.get_bit_length() / t
         self.throughputs.append(msg.get_bit_length() / t)
-        #self.Ts[self.Tsi] = (msg.get_bit_length() / t) 
-        print(f'================================ {self.throughputs[-1]}')
         self.send_up(msg)
 
     def initialize(self):
