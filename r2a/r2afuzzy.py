@@ -84,7 +84,7 @@ class R2AFuzzy(IR2A):
         self.buffers.append(self.buffer_time)
 
         FACTORS = {'N2':0.25,'N1':0.5, 'Z':1, 'P1':1.5, 'P2':2}
-        self.short, close, self.long, falling, steady, rising = 0,0,0,0,0,0
+        short, close, long, falling, steady, rising = 0,0,0,0,0,0
 
         if(self.buffer_time <= self.TWO_THIRDS_T):
             short = 1
