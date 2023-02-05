@@ -19,7 +19,6 @@ class R2AFuzzy(IR2A):
         self.TWO_THIRDS_T = (2 * self.T) /3
         self.FOUR_T = 4 * self.T
 
-
     def handle_xml_request(self, msg):
         self.request_time = time.perf_counter()
         self.send_down(msg)
@@ -36,42 +35,30 @@ class R2AFuzzy(IR2A):
 
         next_resolution = self.qi[0]
 
-        print(len(self.buffer))
-
         if len(self.buffer) > 0: 
             f = self.output_controller(self.buffer)
-            avarage_thoughputs = mean(self.throughputs[-5:])
+            avarage_thoughputs = mean(self.throughputs[-3:])
+            avarage_resolutions = mean(self.resolutions[-3:])
             next_bit_rate = f * avarage_thoughputs
             index = bisect.bisect(self.qi, next_bit_rate)
             next_resolution = self.qi[index - 1]
             current_resolution = self.resolutions[-1]            
-            avarage_resolutions = mean(self.resolutions[-10:])
             estimated_buffer = 'nao interessa'
 
             print(f'+++++++++++++ self.resolutions[-5:],mean(self.resolutions[-5:]), next_resolution, estimated_buffer')
             print(f'+++++++++++++ {self.resolutions[-5:],mean(self.resolutions[-5:]), next_resolution, estimated_buffer}')
 
-            # if (next_resolution > current_resolution and estimated_buffer < self.T) or \
-            #     (next_resolution < current_resolution and estimated_buffer > self.T):
-            #     print("NÃO MUDOU "*5)
-            #     next_resolution = current_resolution
+            estimated_buffer_next  = self.buffer_time + ((self.throughputs[-1] / 3) / next_resolution) * 60
+            estimated_buffer_previous = self.buffer_time + ((self.throughputs[-1] / 3) / current_resolution) * 60
 
             if next_resolution > current_resolution:
-                estimated_buffer  = self.buffer_time + (avarage_thoughputs / next_resolution -1) * 60
-                if estimated_buffer < self.T:
+                if estimated_buffer_next < self.T:
                     next_resolution = current_resolution
                     print(f'!!!!!!!!!!!! OLHA O BUFFER: {estimated_buffer}')
             elif next_resolution < current_resolution:
-                estimated_buffer  = self.buffer_time + (avarage_thoughputs / next_resolution -1) * 60
-                print(f'!!!!!!!!!!!! OLHA O BUFFER: {estimated_buffer}')
-                if estimated_buffer > self.T:
-                    estimated_buffer = self.buffer_time + (avarage_resolutions / current_resolution - 1) * 60
-                    print(f'!!!!!!!!!!!! OLHA O BUFFER: {estimated_buffer}')
-                    if estimated_buffer > self.T:
-                        next_resolution = current_resolution 
-                        print(f'!!!!!!!!!!!! Caso 2')
-
-            
+                if estimated_buffer_previous > self.T:
+                    next_resolution = current_resolution 
+                    print(f'!!!!!!!!!!!! Caso 2')
 
             print(f'>>>>>>>>>>>>> f, self.buffer_time, current_throughput, avarage_thoughputs, current_resolution, next_bit_rate, index, next_resolution')
             print(f'>>>>>>>>>>>>>{f, self.buffer_time, self.throughputs[-1], avarage_thoughputs, current_resolution, next_bit_rate, index, next_resolution}')
@@ -88,7 +75,6 @@ class R2AFuzzy(IR2A):
         return a * self.buffer_time + b
 
     def output_controller(self, buffer):
-        
         self.buffer_time = buffer[-1][1]
         try:
             previous_buffer_time = self.buffers[-1]
@@ -96,7 +82,7 @@ class R2AFuzzy(IR2A):
             previous_buffer_time = self.buffer_time
         self.buffers.append(self.buffer_time)
         FACTORS = {'N2':0.25,'N1':0.5, 'Z':1, 'P1':1.5, 'P2':2}
-        short, close, long, falling, steady, rising = 0,0,0,0,0,0
+        self.short, close, self.long, falling, steady, rising = 0,0,0,0,0,0
 
         if(self.buffer_time <= self.TWO_THIRDS_T):
             short = 1
@@ -178,6 +164,7 @@ class R2AFuzzy(IR2A):
         #self.vazao[self.qi] = msg.get_bit_length() / t
         self.throughputs.append(msg.get_bit_length() / t)
         #self.Ts[self.Tsi] = (msg.get_bit_length() / t) 
+        print(f'================================ {self.throughputs[-1]}')
         self.send_up(msg)
 
     def initialize(self):
